@@ -26,3 +26,6 @@ replace_pair(K, N, [(K, _)|T], [(K, N)|T]).
 replace_pair(K, N, [(X, Y)|T], [(X, Y)|NewT]) :-
     dif(K, X),
     replace_pair(K, N, T, NewT).
+
+starting_played([(red, 0), (blue, 0), (yellow, 0), (green, 0), (white, 0)]).
+starting_discard([]).
