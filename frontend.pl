@@ -17,7 +17,7 @@ info(Tokens,Miss,Played,Discard,HintLog)
 
 % start
 % starts the application by loading the knowledge base and starting the main menu
-start:-
+start :-
     writeln('Welcome to Hanabi!'), nl,
     main_menu.
 

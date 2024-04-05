@@ -19,7 +19,7 @@ card(Col, Num, (ColKnown, NumKnown))
 
 */
 
-[main].
+[frontend].
 
 % source https://stackoverflow.com/questions/32691313/counter-in-prolog
 
