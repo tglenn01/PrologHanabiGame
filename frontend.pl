@@ -31,22 +31,21 @@ main_menu :-
     catch(
         read(Ans),
         error(syntax_error(_), _),
-        (writeln('Input not applicable. Please re-enter.'), nl, main_menu)
+        (writeln('Invalid input, please re-enter.'), nl, main_menu)
     ), nl,
+    check_ans_main(Ans).
 
-    check_ans(Ans).
-
-
-check_ans(1) :-
+check_ans_main(1) :-
     read_rules,
     main_menu.
-
-check_ans(2) :-
+check_ans_main(2) :-
     start_game.
-
-check_ans(3) :-
+check_ans_main(3) :-
     writeln('Have a lovely day ^_^'),
     halt.
+check_ans_main(Ans) :-
+    \+ member(Ans, [1,2,3]),
+    writeln('Invalid input, please re-enter.'), nl, main_menu.
 
 read_rules :- 
     writeln('Detailed rules found on the wikipedia article'),
@@ -63,42 +62,179 @@ read_rules :-
     writeln('[3] Discard one of your cards to gain an information token'), nl, nl.
 
 start_game :-
-    writeln('Starting up the game… make sure you have all 4 people present and number yourselves 1-4'), nl, nl,
-    % TODO:
-        % player name input
-        % game state initialization: deal cards
-    % TEMP
-    gameplay_loop(state(player([], 'a'), team(player([], 'b'), player([], 'c'), player([], 'd')), [], info(8, 0, [], []))).
+    writeln('Starting up the game... make sure you have all 4 people present and number yourselves 1-4'), nl, nl,
+    % TODO: player name input?
+    init_information_token, init_miss_chances, init_played_cards,
+    starting_deck(Deck),
+    % TODO: deal cards
+    starting_hands(state(player([], 'Player 1'), team(player([], 'Player 2'), player([], 'Player 3'), player([], 'Player 4')), Deck, []), NewState),
+    gameplay_loop(NewState).
 
-gameplay_loop(state(Player, team(P2, P3, P4), Deck, Info)) :- 
+gameplay_loop(state(Player, team(P2, P3, P4), Deck, Discard)) :- 
     confirm_player_ready(Player),
-    print_info(state(Player, Team, Deck, Info)).
-%    poll_for_options.
-    gameplay_loop(state(P2, team(P3, P4, Player), Deck, Info)).
+    print_info(state(Player, team(P2, P3, P4), Deck, Discard)),
+    handle_player_action(state(Player, team(P2, P3, P4), Deck, Discard), NewState),
+    % TODO: handle action, update game state after action
+    % dec_miss_chances,
+    miss_chances(Miss),
+    (dif(Miss, 0) ->
+        rotate_players(NewState, NextPlayerState),
+        gameplay_loop(NextPlayerState) ;
+        writeln('GAME OVER')
+        % TODO: game over sequence
+    ).
 
+rotate_players(state(Player, team(P2, P3, P4), Deck, Discard), state(P2, team(P3, P4, Player), Deck, Discard)).
+
+% Confirms that a player is ready to take their actions
 confirm_player_ready(player(Hand, Name)) :-
-    write('Hey, make sure only '), write(Name), write('is looking at the screen.'), nl,
+    write('Hey, make sure only '), write(Name), write(' is looking at the screen.'), nl,
     writeln('Type "okay." when you are ready!'),
     catch(
         read(Ans),
         error(syntax_error(_), _),
-        (writeln('Invalid input, please re-enter.'), nl, main_menu)
+        (writeln('Invalid input, please re-enter.'), nl, confirm_player_ready(player(Hand, Name)))
     ), nl,
-
     (Ans = 'okay' -> 
          writeln('Sounds good, champ!'), nl;
          writeln('Try again!'),
-         confirm_player_ready(Player)).
+         confirm_player_ready(player(Hand, Name))).
 
-% TODO: add played + discarded cards
-% print_info(state(player([card(green,3,(false,false)),card(blue,2,(true,false)),card(red,3,(false,true)),card(white,1,(true,true))],'baba'),team(player([card(red,2,(false,true)),card(blue,4,(true,false)),card(yellow,4,(true,true)),card(white,1,(true,true))],'keke'),player([card(yellow,2,(false,true)),card(green,3,(true,false)),card(yellow,1,(true,true)),card(green,1,(true,true))],'jiji'),player([card(white,2,(false,true)),card(red,5,(true,false)),card(white,3,(true,true)),card(white,3,(true,true))],'fofo')),[],info(7,1,[],[]))).
-print_info(state(player(H1, P1), team(player(H2, P2), player(H3, P3), player(H4, P4)), Deck, info(Tokens, Miss, Played, Discard))) :-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% START ACTION HANDLING MESS %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+handle_player_action(Action) :-
+    information_token(Tokens),
+    writeln('Which action would you like to take?'),
+    writeln('[1] Play a card onto the playfield'),
+    (Tokens < 8 -> writeln('[2] Discard a card to gain a clue token') ; write('')),
+    (Tokens > 0 -> writeln('[3] Give another player a clue') ; write('')),
+    catch(
+        read(Ans),
+        error(syntax_error(_), _),
+        (writeln('Invalid input, please re-enter.'), nl, handle_player_action(Action))
+    ), nl,
+
+check_ans_action(1, _).
+check_ans_action(2, X) :- dif(X, 8).
+check_ans_action(3, X) :- dif(X, 0).
+% force failure on invalid actions
+check_ans_action(2, 8) :- check_ans_action(false, false).
+check_ans_action(3, 0) :- check_ans_action(false, false).
+check_ans_action(Ans, _) :-
+    \+ member(Ans, [1,2,3]),
+    writeln('Invalid input, please re-enter.').
+
+% DO NOT DRAW A CARD IF DECK IS EMPTY
+/*handle_action(Action, state(player(H1, P1), team(player(H2, P2), player(H3, P3), player(H4, P4)), _, Discard), NewState) :-
+    (Action = '1' ->
+        (valid_play())
+        ;
+        (Action = '2' -> 
+            
+            ;
+            (Action = '3' ->
+
+                ;
+                dec_miss_chances,
+                writeln('No action was taken within 60 seconds, so you have automatically misfired a rocket'))
+        )
+    ). */
+
+/*
+1: play (check if valid)
+- ask what card to play
+- if valid
+  - update played cards
+  - if 5 played, increment clue tokens by 1
+- if NOT valid
+  - increment miss could by 1
+  - discard played card
+2: discard
+- ask what card to discard
+- discard played card
+- increment clue tokens by 1
+3: give clue
+- ask what player to give clue to
+- ask what to clue
+- give_clue
+- decrement clue tokens by 1
+*/
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% END ACTION HANDLING MESS %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%
+%% HAMBURGER %%
+%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%% HAMBURGER %%
+%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% B % U % G % I % N % B % I % O %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% one borger pls% Prints out the current game state
+    % print_info(state(player([card(green,3,(false,false)),card(blue,2,(true,false)),card(red,3,(false,true)),card(white,1,(true,true))],'baba'),team(player([card(red,2,(false,true)),card(blue,4,(true,false)),card(yellow,4,(true,true)),card(white,1,(true,true))],'keke'),player([card(yellow,2,(false,true)),card(green,3,(true,false)),card(yellow,1,(true,true)),card(green,1,(true,true))],'jiji'),player([card(white,2,(false,true)),card(red,5,(true,false)),card(white,3,(true,true)),card(white,3,(true,true))],'fofo')),[],[])).
+print_info(state(player(H1, _), team(player(H2, P2), player(H3, P3), player(H4, P4)), _, Discard)) :-
     write(P2), write('''s hand: ['), print_hand(H2), write(']'), nl,
     write(P3), write('''s hand: ['), print_hand(H3), write(']'), nl,
     write(P4), write('''s hand: ['), print_hand(H4), write(']'), nl,
     write('Your hand: ['), print_hidden_hand(H1), write(']'), nl, nl,
-    format('~d information tokens, ~d misses~n', [Tokens, Miss]),
-    writeln('Played: TODO'), writeln('Discarded: TODO').
+    information_token(Tokens),
+    miss_chances(M), Miss is 3-M,
+    format('~d information tokens, ~d miss', [Tokens, Miss]),
+    (dif(Miss, 1) -> write('es')), nl,
+    played_cards(card(red,    NumR, _)),
+    played_cards(card(yellow, NumY, _)),
+    played_cards(card(green,  NumG, _)),
+    played_cards(card(blue,   NumB, _)),
+    played_cards(card(white,  NumW, _)),
+    print_played_cards(NumR, NumY, NumG, NumB, NumW),
+    print_discarded_cards(Discard), nl.
+
+% Prints out the currently played cards
+print_played_cards(Red, Yellow, Green, Blue, White) :-
+    write('Played: '),
+    (Red = 0, Yellow = 0, Green = 0, Blue = 0, White = 0 ->
+        write('[none]') ;
+        (Red = 0 ->    stringify(red, RS),    format('~s-~d ', [RS, Red])),
+        (Yellow = 0 -> stringify(yellow, YS), format('~s-~d ', [YS, Yellow])),
+        (Green = 0 ->  stringify(green, GS),  format('~s-~d ', [GS, Green])),
+        (Blue = 0 ->   stringify(blue, BS),   format('~s-~d ', [BS, Blue])),
+        (White = 0 ->  stringify(white, WS),  format('~s-~d ', [WS, White]))
+    ), nl.
+
+print_discarded_cards(Cards) :-
+    write('Discarded: '),
+    (dif(Cards, []) ->
+        print_hand(Cards) ;
+        write('[none]')
+    ), nl.
 
 % card(Col, Num, (ColKnown, NumKnown))
 print_hand([]).
