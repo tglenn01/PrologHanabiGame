@@ -155,11 +155,11 @@ init_deck(Deck) :- make_deck([red,blue,green,white,yellow], [1,1,1,2,2,3,3,4,4,5
 % append(L1, L2, Combined)
 
 % src :- https://comp.lang.prolog.narkive.com/6BvFqRTX/how-to-delete-nth-element-from-a-list
-remove_nth([H|T],1,T).
+remove_nth([_|T],1,T).
 remove_nth([H|T],N,[H|X]) :- N1 is N-1, remove_nth(T,N1,X).
 
-get_nth([H|T],1,H).
-get_nth([H|T],N,X) :- N1 is N-1, get_nth(T,N1,X).
+get_nth([H|_],1,H).
+get_nth([_|T],N,X) :- N1 is N-1, get_nth(T,N1,X).
 
 /* 
 shuffle_deck([], _, []).

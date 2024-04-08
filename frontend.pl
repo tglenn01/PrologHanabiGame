@@ -80,7 +80,7 @@ gameplay_loop(state(Player, team(P2, P3, P4), Deck, Discard)) :-
     (dif(Miss, 0) ->
         rotate_players(NewState, NextPlayerState),
         gameplay_loop(NextPlayerState) ;
-        writeln('GAME OVER')
+        writeln('GAME OVER (3 misses)')
         % TODO: game over sequence
     ).
 
@@ -104,7 +104,9 @@ confirm_player_ready(player(Hand, Name)) :-
 %% START ACTION HANDLING MESS %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-handle_player_action(Action) :-
+% state(Player, team(P2, P3, P4), Deck, Discard)
+
+handle_player_action(State, NewState) :-
     information_token(Tokens),
     writeln('Which action would you like to take?'),
     writeln('[1] Play a card onto the playfield'),
@@ -113,18 +115,103 @@ handle_player_action(Action) :-
     catch(
         read(Ans),
         error(syntax_error(_), _),
-        (writeln('Invalid input, please re-enter.'), nl, handle_player_action(Action))
+        (writeln('Invalid input, please re-enter.'), nl, handle_player_action(State, NewState))
     ), nl,
+    (check_ans_action(Ans, Tokens) ->
+        (Ans = 1 ->
+            handle_play(State, NewState) ;
+            (Ans = 2 ->
+                handle_discard(State, NewState) ;
+                handle_clue(State, NewState))) ;
+        writeln('Invalid input, please re-enter.'), nl,
+        handle_player_action(State, NewState)).
 
 check_ans_action(1, _).
 check_ans_action(2, X) :- dif(X, 8).
 check_ans_action(3, X) :- dif(X, 0).
+
+handle_play(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)) :-
+    writeln('Which card would you like to play?'),
+    print_playable_cards(Hand), 
+    writeln('[back] Choose a different action'),
+    catch(
+        read(Ans),
+        error(syntax_error(_), _),
+        (writeln('Invalid input, please re-enter.'), nl,
+        handle_play(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)))
+    ), nl,
+    (Ans = 'back' ->
+        handle_player_action(state(player(Hand, Name), Team, Deck, Discard),
+            state(player(NewHand, Name), Team, NewDeck, NewDiscard)) ;
+        (number(Ans), length(Hand, L), Ans > 0, Ans =< L ->
+            % TODO: handle action
+            write('TODO'), not(dif(Hand, NewHand)), not(dif(Deck, NewDeck)), not(dif(Discard, NewDiscard)) ;
+            writeln('Invalid input, please re-enter.'), nl,
+            handle_play(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)))).
+
+handle_discard(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)) :-
+writeln('Which card would you like to discard?'),
+print_playable_cards(Hand), 
+writeln('[back] Choose a different action'),
+catch(
+    read(Ans),
+    error(syntax_error(_), _),
+    (writeln('Invalid input, please re-enter.'), nl,
+    handle_discard(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)))
+), nl,
+(Ans = 'back' ->
+    handle_player_action(state(player(Hand, Name), Team, Deck, Discard),
+        state(player(NewHand, Name), Team, NewDeck, NewDiscard)) ;
+    (number(Ans), length(Hand, L), Ans > 0, Ans =< L ->
+        % TODO: handle action
+        write('TODO'), not(dif(Hand, NewHand)), not(dif(Deck, NewDeck)), not(dif(Discard, NewDiscard)) ;
+        writeln('Invalid input, please re-enter.'), nl,
+        handle_discard(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)))).
+
+handle_clue(state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard), state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)) :-
+writeln('Which player would you like to give a clue to?'),
+format('[1] ~s: ', [N2]), print_hand(H2), nl,
+format('[2] ~s: ', [N3]), print_hand(H3), nl,
+format('[3] ~s: ', [N4]), print_hand(H4), nl,
+writeln('[back] Choose a different action'),
+catch(
+    read(Ans),
+    error(syntax_error(_), _),
+    (writeln('Invalid input, please re-enter.'), nl,
+    handle_clue(state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard),
+        state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)))
+), nl,
+(Ans = 'back' ->
+    handle_player_action(state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard),
+        state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)) ;
+    (Ans = 1 ->
+        % TODO: handle action for P2
+        not(dif(H2, NewH2)), not(dif(H3, NewH3)), not(dif(H4, NewH4)) ;
+        (Ans = 2 ->
+            % TODO: handle action for P3
+            not(dif(H2, NewH2)), not(dif(H3, NewH3)), not(dif(H4, NewH4)) ;
+            (Ans = 3 ->
+                % TODO: handle action for P4
+                not(dif(H2, NewH2)), not(dif(H3, NewH3)), not(dif(H4, NewH4)) ;
+                writeln('Invalid input, please re-enter.'), nl,
+                handle_clue(state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard),
+                    state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)))))).
+        
+% Shows the player all of the cards in their hand that they can play
+print_playable_cards(Hand) :- print_playable_cards_helper(Hand, 1).
+
+print_playable_cards_helper([], _).
+print_playable_cards_helper([card(Col, Num, (CK, NK))|T], I) :-
+    format('[~d] ', [I]), 
+    print_hidden_card(card(Col, Num, (CK, NK))), nl,
+    I1 is I+1, print_playable_cards_helper(T, I1).
+
 % force failure on invalid actions
-check_ans_action(2, 8) :- check_ans_action(false, false).
+/*check_ans_action(2, 8) :- check_ans_action(false, false).
 check_ans_action(3, 0) :- check_ans_action(false, false).
 check_ans_action(Ans, _) :-
     \+ member(Ans, [1,2,3]),
-    writeln('Invalid input, please re-enter.').
+    writeln('Invalid input, please re-enter.').*/
 
 % DO NOT DRAW A CARD IF DECK IS EMPTY
 /*handle_action(Action, state(player(H1, P1), team(player(H2, P2), player(H3, P3), player(H4, P4)), _, Discard), NewState) :-
