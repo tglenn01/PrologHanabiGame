@@ -27,6 +27,8 @@ card(Col, Num, (ColKnown, NumKnown))
 :- dynamic played_cards/1.
 :- dynamic information_token/1.
 :- dynamic miss_chances/1.
+:- dynamic is_count_down/1.
+:- dynamic countdown_to_end_game/1.
 
 init_played_cards :-
     retractall(played_cards(_)),
@@ -73,8 +75,56 @@ dec_miss_chances :-
     retractall(miss_chances(_)),
     assertz(miss_chances(NewChances)).
 
+% done
+init_is_count_down :- 
+    retractall(is_count_down(_)),
+    assertz(is_count_down(0)).
+
+activate_is_count_down :- 
+    retractall(is_count_down(_)),
+    assertz(is_count_down(1)).
+
+% done
+init_countdown_to_end_game :- 
+    retractall(countdown_to_end_game(_)),
+    assertz(countdown_to_end_game(0)).
+
+activate_countdown_to_end_game :- 
+    retractall(countdown_to_end_game(_)),
+    assertz(countdown_to_end_game(4)).
+
+dec_countdown_to_end_game :- 
+    miss_chances(OldCountdown),
+    succ(NewCountdown, OldCountdown),
+    retractall(countdown_to_end_game(_)),
+    assertz(countdown_to_end_game(NewCountdown)).
+
+
+is_field_complete :-
+    played_cards(card(red, 5, (_, _))),
+    played_cards(card(blue, 5, (_, _))),
+    played_cards(card(green, 5, (_, _))),
+    played_cards(card(yellow, 5, (_, _))),
+    played_cards(card(white, 5, (_, _))).
+
+score_played_field(Score) :- 
+    Count is 0,
+    played_cards(card(red, RedCount, (_, _))),
+    Count1 is Count + RedCount,
+    played_cards(card(blue, BlueCount, (_, _))),
+    Count2 is Count1 + BlueCount,
+    played_cards(card(green, GreenCount, (_, _))),
+    Count3 is Count2 + GreenCount,
+    played_cards(card(yellow, YellowCount, (_, _))),
+    Count4 is Count3 + YellowCount,
+    played_cards(card(white, WhiteCount, (_, _))),
+    Score is Count4 + WhiteCount.
+
 % identity(A, B) is true is A and B are the same
 identity(X, X).
+
+% rotates the player turn order clockwise
+rotate_players(state(Player, team(P2, P3, P4), Deck, Discard), state(P2, team(P3, P4, Player), Deck, Discard)).
 
 % valid_play is true if card(C, N0) can be played without causing a miss
 valid_play(card(Col, N0, _)) :-
@@ -132,16 +182,18 @@ give_clue_helper(X, [card(Col, Num, (CK, NK))|Rest], I, [card(Col, Num, (CK, NK)
     I1 is I+1,
     give_clue_helper(X, Rest, I1, NewRest, CluedIndices).
 
+% plays a card on the field, then gives the player a new card from the draw deck
 play_card(I, Hand, Deck, Discard, NewHand, NewDeck, Discard) :-
     get_nth(Hand, I, Card),
     play_card_on_field(Card),
     remove_nth(Hand, I, ReducedHand),
-    draw_card(ReducedHand, Deck, _, NewHand, NewDeck).
+    draw_card(ReducedHand, Deck, NewHand, NewDeck).
 
+% discards a card from a player's hand, then gives the player a new card from the draw deck
 discard_card(I, Hand, Deck, Discard, NewHand, NewDeck, [Card|Discard]) :-
     get_nth(Hand, I, Card),
     remove_nth(Hand, I, ReducedHand),
-    draw_card(ReducedHand, Deck, _, NewHand, NewDeck).
+    draw_card(ReducedHand, Deck, NewHand, NewDeck).
 
 % replace_pair changes the value of the pair with key K to N, if the pair exists
 replace_pair(_, _, [], []).
@@ -156,10 +208,9 @@ replace_pair(K, N, [(X, Y)|T], [(X, Y)|NewT]) :-
 % TODO
 % deal_cards()
 
-%Draw top card of the deck into player hand on the left
-%draw_card(state(player(Hand,Name),Team,[H|T],Discard)) :- state(player([H|Hand],Name),Team,T,Discard).
-draw_card(Hand, [H|T], H, [H|Hand], T).
-draw_card(Hand, [], false, Hand, []).
+% Draw top card of the deck into player hand on the left
+draw_card(Hand, [H|T], [H|Hand], T).
+draw_card(Hand, [], Hand, []).
 
 make_card(Col, Num, card(Col, Num, (false, false))).
 
@@ -213,8 +264,7 @@ starting_deck(Deck) :-
     shuffle_deck_3(Sorted, Deck).
 
 % I'm sorry you had to see this. This is a sin, a crime against humanity.
-starting_hands(state(player(_,N1),team(player(_,N2),player(_,N3),player(_,N4)),[A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T|U],Discard), state(player([A,B,C,D,E],N1),team(player([F,G,H,I,J],N2),player([K,L,M,N,O],N3),player([P,Q,R,S,T],N4)),U,Discard)).
-    
+starting_hands(state(player(_,N1),team(player(_,N2),player(_,N3),player(_,N4)),[A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P|Q],Discard), state(player([A,B,C,D],N1),team(player([E,F,G,H],N2),player([I,J,K,L],N3),player([M,N,O,P],N4)),Q,Discard)).
 
 % starting_hands(state(player([A|B|C|D|E],N1),(player([F|G|H|I|J],N2,player([K|L|M|N|O],N3),player([P|Q|R|S|T],N4)),U,Discard))).
-
+check_deck_empty(state(_,_,[],_)).
