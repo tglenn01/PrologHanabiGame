@@ -12,7 +12,7 @@
 
 /*
 variables storing data in a recursive relation
-- state: Played, Discarded, Deck, Tokens, Misses, Hands
+- state: Played, Discarded, Deck, Tokes, Misses, Hands
 
 card(Col, Num, (ColKnown, NumKnown))
 - Col = red ; yellow ; green ; blue ; white .
@@ -68,10 +68,13 @@ init_miss_chances :-
     assertz(miss_chances(3)).
 
 dec_miss_chances :-
-    information_token(OldChances),
+    miss_chances(OldChances),
     succ(NewChances, OldChances),
     retractall(miss_chances(_)),
     assertz(miss_chances(NewChances)).
+
+% identity(A, B) is true is A and B are the same
+identity(X, X).
 
 % valid_play is true if card(C, N0) can be played without causing a miss
 valid_play(card(Col, N0, _)) :-
@@ -94,15 +97,22 @@ valid_clue(blue).
 valid_clue(white).
 
 % convert_to_clue(S, Clue) is true if S is the tring representation of a Clue
-convert_to_clue("red", red).
-convert_to_clue("yellow", yellow).
-convert_to_clue("green", green).
-convert_to_clue("blue", blue).
-convert_to_clue("white", white).
+convert_to_clue('red', red).
+convert_to_clue('yellow', yellow).
+convert_to_clue('green', green).
+convert_to_clue('blue', blue).
+convert_to_clue('white', white).
 
 % parse_clue(Clue, Parsed) is true if Parsed is a valid clue parsed from Clue
-parse_clue(Clue, Parsed) :- number_string(Parsed, Clue), number(Parsed), valid_clue(Parsed).
+%parse_clue(Clue, Parsed) :- number_string(Parsed, Clue), number(Parsed), valid_clue(Parsed).
+parse_clue(Clue, Clue) :- valid_clue(Clue).
 parse_clue(Clue, Parsed) :- string_lower(Clue, LC), convert_to_clue(LC, Parsed), valid_clue(Parsed).
+
+% hand_has_clueable(Clue, Hand) is true if at least one of the cards in Hand can be clued with Clue
+hand_has_clueable(Col, [card(Col, _, _)|_]).
+hand_has_clueable(Num, [card(_, Num, _)|_]).
+hand_has_clueable(X, [card(Col, Num, _)|T]) :-
+    dif(Col, X), dif(Num, X), hand_has_clueable(X, T).
 
 % give_clue(Clue, Hand, NewHand, CluedIndices) marks all cards in Hand that have the clued property as being clued
     % true if NewHand is the updated hand, and CluedIndices is a list of the indices of the clued cards
@@ -122,6 +132,17 @@ give_clue_helper(X, [card(Col, Num, (CK, NK))|Rest], I, [card(Col, Num, (CK, NK)
     I1 is I+1,
     give_clue_helper(X, Rest, I1, NewRest, CluedIndices).
 
+play_card(I, Hand, Deck, Discard, NewHand, NewDeck, Discard) :-
+    get_nth(Hand, I, Card),
+    play_card_on_field(Card),
+    remove_nth(Hand, I, ReducedHand),
+    draw_card(ReducedHand, Deck, _, NewHand, NewDeck).
+
+discard_card(I, Hand, Deck, Discard, NewHand, NewDeck, [Card|Discard]) :-
+    get_nth(Hand, I, Card),
+    remove_nth(Hand, I, ReducedHand),
+    draw_card(ReducedHand, Deck, _, NewHand, NewDeck).
+
 % replace_pair changes the value of the pair with key K to N, if the pair exists
 replace_pair(_, _, [], []).
 replace_pair(K, N, [(K, _)|T], [(K, N)|T]).
@@ -136,7 +157,9 @@ replace_pair(K, N, [(X, Y)|T], [(X, Y)|NewT]) :-
 % deal_cards()
 
 %Draw top card of the deck into player hand on the left
-draw_card(state(player(hand,Name),Team,[H|T],Discard)) :- state(player([H|hand],Name),Team,T,Discard).
+%draw_card(state(player(Hand,Name),Team,[H|T],Discard)) :- state(player([H|Hand],Name),Team,T,Discard).
+draw_card(Hand, [H|T], H, [H|Hand], T).
+draw_card(Hand, [], false, Hand, []).
 
 make_card(Col, Num, card(Col, Num, (false, false))).
 

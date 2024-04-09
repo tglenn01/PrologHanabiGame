@@ -15,6 +15,8 @@ player(Hand,Name)
 info(Tokens,Miss,Played,Discard,HintLog)
 */
 
+library(statistics).
+
 % start
 % starts the application by loading the knowledge base and starting the main menu
 start :-
@@ -28,11 +30,7 @@ main_menu :-
     writeln('[2] Start Playing!'),
     writeln('[3] Exit'),
 
-    catch(
-        read(Ans),
-        error(syntax_error(_), _),
-        (writeln('Invalid input, please re-enter.'), nl, main_menu)
-    ), nl,
+    read_term(Ans, [syntax_errors(dec10)]), nl,
     check_ans_main(Ans).
 
 check_ans_main(1) :-
@@ -67,20 +65,21 @@ start_game :-
     init_information_token, init_miss_chances, init_played_cards,
     starting_deck(Deck),
     % TODO: deal cards
-    starting_hands(state(player([], 'Player 1'), team(player([], 'Player 2'), player([], 'Player 3'), player([], 'Player 4')), Deck, []), NewState),
+    starting_hands(state(player([], 'Player A'), team(player([], 'Player B'), player([], 'Player C'), player([], 'Player D')), Deck, []), NewState),
     gameplay_loop(NewState).
 
 gameplay_loop(state(Player, team(P2, P3, P4), Deck, Discard)) :- 
     confirm_player_ready(Player),
     print_info(state(Player, team(P2, P3, P4), Deck, Discard)),
     handle_player_action(state(Player, team(P2, P3, P4), Deck, Discard), NewState),
-    % TODO: handle action, update game state after action
-    % dec_miss_chances,
+    handle_round_end(NewState).
+
+handle_round_end(State) :-
     miss_chances(Miss),
-    (dif(Miss, 0) ->
-        rotate_players(NewState, NextPlayerState),
-        gameplay_loop(NextPlayerState) ;
-        writeln('GAME OVER (3 misses)')
+    (Miss > 0 ->
+        rotate_players(State, NewState),
+        gameplay_loop(NewState) ;
+        writeln('GAME OVER (3 misfires)')
         % TODO: game over sequence
     ).
 
@@ -90,19 +89,11 @@ rotate_players(state(Player, team(P2, P3, P4), Deck, Discard), state(P2, team(P3
 confirm_player_ready(player(Hand, Name)) :-
     write('Hey, make sure only '), write(Name), write(' is looking at the screen.'), nl,
     writeln('Type "okay." when you are ready!'),
-    catch(
-        read(Ans),
-        error(syntax_error(_), _),
-        (writeln('Invalid input, please re-enter.'), nl, confirm_player_ready(player(Hand, Name)))
-    ), nl,
+    read_term(Ans, [syntax_errors(dec10)]), nl,
     (Ans = 'okay' -> 
          writeln('Sounds good, champ!'), nl;
          writeln('Try again!'),
          confirm_player_ready(player(Hand, Name))).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% START ACTION HANDLING MESS %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % state(Player, team(P2, P3, P4), Deck, Discard)
 
@@ -112,19 +103,61 @@ handle_player_action(State, NewState) :-
     writeln('[1] Play a card onto the playfield'),
     (Tokens < 8 -> writeln('[2] Discard a card to gain a clue token') ; write('')),
     (Tokens > 0 -> writeln('[3] Give another player a clue') ; write('')),
+    init_turn_timer(TimerId),
+    read_term(Ans, [syntax_errors(dec10)]), nl,
+    (check_timer(TimerId) ->
+        (check_ans_action(Ans, Tokens) ->
+            (Ans = 1 ->
+                handle_play(State, NewState) ;
+                (Ans = 2 ->
+                    handle_discard(State, NewState) ;
+                    handle_clue(State, NewState))) ;
+            (reset_timer(TimerId),
+            invalid_handle_player_action(State, NewState))) ;
+        dec_miss_chances, identity(State, NewState)).
+
+init_turn_timer(TimerId) :- 
+    writeln('Started the timer, you have 60 seconds!'),
+    thread_create(turn_timer(true,0), TimerId).
+
+turn_timer(IsFirstCall, InitialTime) :- 
+    sleep(1),
+    statistics(real_time, [RealTime,_]),
+    (IsFirstCall -> 
+        turn_timer(false,RealTime);
+        TimeDiff is RealTime - InitialTime,
+        (TimeDiff = 30 ->
+            writeln('Thirty seconds remaining!'),
+            turn_timer(false,InitialTime);
+            (TimeDiff = 50 ->
+                writeln('Ten seconds remaining!'),
+                turn_timer(false,InitialTime);
+                (TimeDiff >= 60 ->
+                    writeln('Time''s up!') ;
+                    turn_timer(false,InitialTime))))).
+
+check_timer(TimerId) :-
     catch(
-        read(Ans),
-        error(syntax_error(_), _),
-        (writeln('Invalid input, please re-enter.'), nl, handle_player_action(State, NewState))
-    ), nl,
-    (check_ans_action(Ans, Tokens) ->
-        (Ans = 1 ->
-            handle_play(State, NewState) ;
-            (Ans = 2 ->
-                handle_discard(State, NewState) ;
-                handle_clue(State, NewState))) ;
-        writeln('Invalid input, please re-enter.'), nl,
-        handle_player_action(State, NewState)).
+        thread_signal(TimerId, exit),
+        error(_, _Context),
+        (writeln('You took too long to act, so you automatically MISFIRED.'), nl,
+        false)
+    ),
+    true.
+
+reset_timer(TimerId) :-
+    catch(
+        thread_signal(TimerId, exit),
+        error(_, _Context),
+        (writeln('Resetting the timer!'), nl,
+        false)
+    ),
+    true.
+
+invalid_handle_player_action(State, NewState) :-
+    writeln('Invalid input, please re-enter.'),
+    nl,
+    handle_player_action(State, NewState).
 
 check_ans_action(1, _).
 check_ans_action(2, X) :- dif(X, 8).
@@ -133,70 +166,83 @@ check_ans_action(3, X) :- dif(X, 0).
 handle_play(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)) :-
     writeln('Which card would you like to play?'),
     print_playable_cards(Hand), 
-    writeln('[back] Choose a different action'),
-    catch(
-        read(Ans),
-        error(syntax_error(_), _),
-        (writeln('Invalid input, please re-enter.'), nl,
-        handle_play(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)))
-    ), nl,
-    (Ans = 'back' ->
-        handle_player_action(state(player(Hand, Name), Team, Deck, Discard),
-            state(player(NewHand, Name), Team, NewDeck, NewDiscard)) ;
-        (number(Ans), length(Hand, L), Ans > 0, Ans =< L ->
-            % TODO: handle action
-            write('TODO'), not(dif(Hand, NewHand)), not(dif(Deck, NewDeck)), not(dif(Discard, NewDiscard)) ;
-            writeln('Invalid input, please re-enter.'), nl,
-            handle_play(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)))).
+    % writeln('[back] Choose a different action'),
+    read_term(Ans, [syntax_errors(dec10)]), nl,
+    ((number(Ans), length(Hand, L), Ans > 0, Ans =< L) ->
+        get_nth(Hand, Ans, card(Col, Num, Clues)),
+        write('You play a '), print_card(card(Col, Num, Clues)),
+        (valid_play(card(Col, Num, Clues)) ->
+            % PASS: play
+            writeln(' and SUCCEED'),
+            play_card(Ans, Hand, Deck, Discard, NewHand, NewDeck, NewDiscard),
+            ((Num = 5, information_token(Tokens), Tokens < 8) ->
+                writeln('You successfully played a 5, so you gain an information token'),
+                inc_information_token ; write('')),
+            writeln('You draw a new card from the deck') ;
+            % FAIL: misfire and discard
+            writeln(' and MISFIRE'), dec_miss_chances,
+            discard_card(Ans, Hand, Deck, Discard, NewHand, NewDeck, NewDiscard),
+            writeln('The played card is discarded, and you draw a new card from the deck')))
+        ;
+        writeln('Invalid input, please re-enter.'), nl,
+        handle_play(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)).
 
 handle_discard(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)) :-
-writeln('Which card would you like to discard?'),
-print_playable_cards(Hand), 
-writeln('[back] Choose a different action'),
-catch(
-    read(Ans),
-    error(syntax_error(_), _),
-    (writeln('Invalid input, please re-enter.'), nl,
-    handle_discard(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)))
-), nl,
-(Ans = 'back' ->
-    handle_player_action(state(player(Hand, Name), Team, Deck, Discard),
-        state(player(NewHand, Name), Team, NewDeck, NewDiscard)) ;
+    writeln('Which card would you like to discard?'),
+    print_playable_cards(Hand), 
+    % writeln('[back] Choose a different action'),
+    read_term(Ans, [syntax_errors(dec10)]), nl,
     (number(Ans), length(Hand, L), Ans > 0, Ans =< L ->
-        % TODO: handle action
-        write('TODO'), not(dif(Hand, NewHand)), not(dif(Deck, NewDeck)), not(dif(Discard, NewDiscard)) ;
+        % PASS: discard card
+        get_nth(Hand, Ans, Card), inc_information_token,
+        discard_card(Ans, Hand, Deck, Discard, NewHand, NewDeck, NewDiscard),
+        write('You discard a '), print_card(Card), writeln(' and gain an information token'),
+        writeln('You draw a new card from the deck') ;
+        % FAIL: try again
         writeln('Invalid input, please re-enter.'), nl,
-        handle_discard(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard)))).
+        handle_discard(state(player(Hand, Name), Team, Deck, Discard), state(player(NewHand, Name), Team, NewDeck, NewDiscard))).
 
-handle_clue(state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard), state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)) :-
-writeln('Which player would you like to give a clue to?'),
-format('[1] ~s: ', [N2]), print_hand(H2), nl,
-format('[2] ~s: ', [N3]), print_hand(H3), nl,
-format('[3] ~s: ', [N4]), print_hand(H4), nl,
-writeln('[back] Choose a different action'),
-catch(
-    read(Ans),
-    error(syntax_error(_), _),
-    (writeln('Invalid input, please re-enter.'), nl,
-    handle_clue(state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard),
-        state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)))
-), nl,
-(Ans = 'back' ->
-    handle_player_action(state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard),
-        state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)) ;
-    (Ans = 1 ->
-        % TODO: handle action for P2
-        not(dif(H2, NewH2)), not(dif(H3, NewH3)), not(dif(H4, NewH4)) ;
-        (Ans = 2 ->
-            % TODO: handle action for P3
-            not(dif(H2, NewH2)), not(dif(H3, NewH3)), not(dif(H4, NewH4)) ;
-            (Ans = 3 ->
-                % TODO: handle action for P4
-                not(dif(H2, NewH2)), not(dif(H3, NewH3)), not(dif(H4, NewH4)) ;
-                writeln('Invalid input, please re-enter.'), nl,
-                handle_clue(state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard),
-                    state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)))))).
-        
+handle_clue(state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard), NewState) :-
+    writeln('Which player would you like to give a clue to?'),
+    format('[1] ~s: ', [N2]), print_hand(H2), nl,
+    format('[2] ~s: ', [N3]), print_hand(H3), nl,
+    format('[3] ~s: ', [N4]), print_hand(H4), nl,
+    % writeln('[back] Choose a different action'),
+    read_term(Ans, [syntax_errors(dec10)]), nl,
+    ((number(Ans), Ans >= 1, Ans =< 3) ->
+        % PASS: choose a clue to give
+        handle_clue_selection(Ans, state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard), NewState) ;
+        % FAIL: try again
+        writeln('Invalid input, please re-enter.'), nl,
+        handle_clue(state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard), NewState)).
+
+handle_clue_selection(ChosenPlayer, state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard), state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)) :-
+    writeln('The player must have at least 1 card with the clued propery in order for the clue to be valid'),
+    writeln('What clue would you like to give? (one of {red, yellow, green, blue, white, 1, 2, 3, 4, 5})'),
+    % writeln('[back] Choose a different player to give a clue'),
+    read_term(Ans, [syntax_errors(dec10)]), nl,
+    (parse_clue(Ans, Parsed) ->
+        ((ChosenPlayer = 1, hand_has_clueable(Parsed, H2)) ->
+            give_clue(Parsed, H2, NewH2, _), dec_information_token,
+            identity(H3, NewH3), identity(H4, NewH4),
+            format('You have spent an information token to give ~s the clue ''~w''~n', [N2, Parsed]) ;
+            ((ChosenPlayer = 2, hand_has_clueable(Parsed, H3)) ->
+                give_clue(Parsed, H3, NewH3, _), dec_information_token,
+                identity(H2, NewH2), identity(H4, NewH4),
+                format('You have spent an information token to give ~s the clue ''~w''~n', [N3, Parsed]) ;
+                ((ChosenPlayer = 3, hand_has_clueable(Parsed, H4)) ->
+                    give_clue(Parsed, H4, NewH4, _), dec_information_token,
+                    identity(H2, NewH2), identity(H3, NewH3),
+                    format('You have spent an information token to give ~s the clue ''~w''~n', [N4, Parsed]) ;
+                    (writeln('Invalid input, please re-enter.'), nl,
+                    handle_clue_selection(ChosenPlayer, state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard),
+                        state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)))
+                    )))
+        ;
+        (writeln('Invalid input, please re-enter.'), nl,
+        handle_clue_selection(ChosenPlayer, state(Player, team(player(H2, N2), player(H3, N3), player(H4, N4)), Deck, Discard),
+            state(Player, team(player(NewH2, N2), player(NewH3, N3), player(NewH4, N4)), Deck, Discard)))).
+
 % Shows the player all of the cards in their hand that they can play
 print_playable_cards(Hand) :- print_playable_cards_helper(Hand, 1).
 
@@ -205,29 +251,6 @@ print_playable_cards_helper([card(Col, Num, (CK, NK))|T], I) :-
     format('[~d] ', [I]), 
     print_hidden_card(card(Col, Num, (CK, NK))), nl,
     I1 is I+1, print_playable_cards_helper(T, I1).
-
-% force failure on invalid actions
-/*check_ans_action(2, 8) :- check_ans_action(false, false).
-check_ans_action(3, 0) :- check_ans_action(false, false).
-check_ans_action(Ans, _) :-
-    \+ member(Ans, [1,2,3]),
-    writeln('Invalid input, please re-enter.').*/
-
-% DO NOT DRAW A CARD IF DECK IS EMPTY
-/*handle_action(Action, state(player(H1, P1), team(player(H2, P2), player(H3, P3), player(H4, P4)), _, Discard), NewState) :-
-    (Action = '1' ->
-        (valid_play())
-        ;
-        (Action = '2' -> 
-            
-            ;
-            (Action = '3' ->
-
-                ;
-                dec_miss_chances,
-                writeln('No action was taken within 60 seconds, so you have automatically misfired a rocket'))
-        )
-    ). */
 
 /*
 1: play (check if valid)
@@ -248,10 +271,6 @@ check_ans_action(Ans, _) :-
 - give_clue
 - decrement clue tokens by 1
 */
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% END ACTION HANDLING MESS %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%%%%%%%%%%%%%%
 %% HAMBURGER %%
@@ -294,8 +313,8 @@ print_info(state(player(H1, _), team(player(H2, P2), player(H3, P3), player(H4, 
     write('Your hand: ['), print_hidden_hand(H1), write(']'), nl, nl,
     information_token(Tokens),
     miss_chances(M), Miss is 3-M,
-    format('~d information tokens, ~d miss', [Tokens, Miss]),
-    (dif(Miss, 1) -> write('es')), nl,
+    format('~d information tokens, ~d misfire', [Tokens, Miss]),
+    (dif(Miss, 1) -> write('s') ; write('')), nl,
     played_cards(card(red,    NumR, _)),
     played_cards(card(yellow, NumY, _)),
     played_cards(card(green,  NumG, _)),
@@ -309,11 +328,11 @@ print_played_cards(Red, Yellow, Green, Blue, White) :-
     write('Played: '),
     (Red = 0, Yellow = 0, Green = 0, Blue = 0, White = 0 ->
         write('[none]') ;
-        (Red = 0 ->    stringify(red, RS),    format('~s-~d ', [RS, Red])),
-        (Yellow = 0 -> stringify(yellow, YS), format('~s-~d ', [YS, Yellow])),
-        (Green = 0 ->  stringify(green, GS),  format('~s-~d ', [GS, Green])),
-        (Blue = 0 ->   stringify(blue, BS),   format('~s-~d ', [BS, Blue])),
-        (White = 0 ->  stringify(white, WS),  format('~s-~d ', [WS, White]))
+        (dif(Red, 0)    -> stringify(red, RS),    format('~s-~d ', [RS, Red]) ; true),
+        (dif(Yellow, 0) -> stringify(yellow, YS), format('~s-~d ', [YS, Yellow]) ; true),
+        (dif(Green, 0)  -> stringify(green, GS),  format('~s-~d ', [GS, Green]) ; true),
+        (dif(Blue, 0)   -> stringify(blue, BS),   format('~s-~d ', [BS, Blue]) ; true),
+        (dif(White, 0)  -> stringify(white, WS),  format('~s-~d ', [WS, White]) ; write(''))
     ), nl.
 
 print_discarded_cards(Cards) :-
@@ -328,7 +347,7 @@ print_hand([]).
 print_hand([card(Col, Num, _)|T]) :-
     print_card(card(Col, Num, _)),
     (dif(T, []) ->
-        write(', '), print_hand(T);
+        write(', '), print_hand(T) ;
         write('')).
 
 print_hidden_hand([]).
