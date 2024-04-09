@@ -71,6 +71,8 @@ gameplay_loop(state(Player, team(P2, P3, P4), Deck, Discard)) :-
     confirm_player_ready(Player),
     print_info(state(Player, team(P2, P3, P4), Deck, Discard)),
     handle_player_action(state(Player, team(P2, P3, P4), Deck, Discard), NewState),
+    ((check_deck_empty(NewState), is_count_down(Active), Active is 0) ->
+        writeln('You have drawn the last card in the deck! Each player will get 1 more turn before the game ends') ; write('')),
     confirm_player_done(Player),
     handle_round_end(NewState).
 
@@ -83,7 +85,7 @@ handle_round_end(State) :-
             end_game_scoring ;
             is_count_down(Active),
             ((countdown_to_end_game(N), Active is 1, N is 0) ->
-                writeln('The fireworks show is over (since the deck ran out last turn), ending the game!'),
+                writeln('The fireworks show is over (since the deck ran out on your last turn), ending the game!'),
                 end_game_scoring ;
                 (Active is 1 ->
                     dec_countdown_to_end_game ;
@@ -346,15 +348,21 @@ print_playable_cards_helper([card(Col, Num, (CK, NK))|T], I) :-
 
 % one borger pls% Prints out the current game state
     % print_info(state(player([card(green,3,(false,false)),card(blue,2,(true,false)),card(red,3,(false,true)),card(white,1,(true,true))],'baba'),team(player([card(red,2,(false,true)),card(blue,4,(true,false)),card(yellow,4,(true,true)),card(white,1,(true,true))],'keke'),player([card(yellow,2,(false,true)),card(green,3,(true,false)),card(yellow,1,(true,true)),card(green,1,(true,true))],'jiji'),player([card(white,2,(false,true)),card(red,5,(true,false)),card(white,3,(true,true)),card(white,3,(true,true))],'fofo')),[],[])).
-print_info(state(player(H1, _), team(player(H2, P2), player(H3, P3), player(H4, P4)), _, Discard)) :-
+print_info(state(player(H1, _), team(player(H2, P2), player(H3, P3), player(H4, P4)), Deck, Discard)) :-
     write(P2), write('''s hand: ['), print_hand_with_clues(H2), write(']'), nl,
     write(P3), write('''s hand: ['), print_hand_with_clues(H3), write(']'), nl,
     write(P4), write('''s hand: ['), print_hand_with_clues(H4), write(']'), nl,
     write('Your hand: ['), print_hidden_hand(H1), write(']'), nl, nl,
     information_token(Tokens),
     miss_chances(M), Miss is 3-M,
+    length(Deck, L),
     format('~d information tokens, ~d misfire', [Tokens, Miss]),
-    (dif(Miss, 1) -> write('s') ; write('')), nl,
+    (dif(Miss, 1) -> write('s') ; write('')), 
+    format(', ~d card', [L]),
+    (dif(L, 1) -> write('s') ; write('')),
+    writeln(' left in deck'),
+    ((is_count_down(Active), Active is 1) ->
+        writeln('The draw deck is empty, so this is your last turn!') ; write('')),
     played_cards(card(red,    NumR, _)),
     played_cards(card(yellow, NumY, _)),
     played_cards(card(green,  NumG, _)),
