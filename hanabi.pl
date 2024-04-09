@@ -94,11 +94,10 @@ activate_countdown_to_end_game :-
     assertz(countdown_to_end_game(3)).
 
 dec_countdown_to_end_game :- 
-    miss_chances(OldCountdown),
+    countdown_to_end_game(OldCountdown),
     succ(NewCountdown, OldCountdown),
     retractall(countdown_to_end_game(_)),
     assertz(countdown_to_end_game(NewCountdown)).
-
 
 is_field_complete :-
     played_cards(card(red, 5, (_, _))),
@@ -225,7 +224,7 @@ make_deck([Col|T1], Nums, Return) :-
     make_deck(T1, Nums, Rest),
     append(ColCards, Rest, Return).
 
-init_deck(Deck) :- make_deck([red,blue/*,green,white,yellow*/], [1,1,1,2,2,3,3,4,4,5], Deck).
+init_deck(Deck) :- make_deck([red,blue,green,white,yellow], [1,1,1,2,2,3,3,4,4,5], Deck).
 % append(L1, L2, Combined)
 
 % src :- https://comp.lang.prolog.narkive.com/6BvFqRTX/how-to-delete-nth-element-from-a-list

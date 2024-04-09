@@ -353,6 +353,13 @@ print_info(state(player(H1, _), team(player(H2, P2), player(H3, P3), player(H4, 
     write(P3), write('''s hand: ['), print_hand_with_clues(H3), write(']'), nl,
     write(P4), write('''s hand: ['), print_hand_with_clues(H4), write(']'), nl,
     write('Your hand: ['), print_hidden_hand(H1), write(']'), nl, nl,
+    is_count_down(Active), countdown_to_end_game(TL), TurnsLeft is TL+1,
+    (Active is 1 ->
+        write('The draw deck is empty, there '),
+        (dif(TurnsLeft, 1) ->
+            format('are ~d turns left~n', [TurnsLeft]) ;
+            format('is ~d turn left~n', [TurnsLeft])),
+        writeln('This is your last turn!'), nl ; write('')),
     information_token(Tokens),
     miss_chances(M), Miss is 3-M,
     length(Deck, L),
@@ -361,8 +368,6 @@ print_info(state(player(H1, _), team(player(H2, P2), player(H3, P3), player(H4, 
     format(', ~d card', [L]),
     (dif(L, 1) -> write('s') ; write('')),
     writeln(' left in deck'),
-    ((is_count_down(Active), Active is 1) ->
-        writeln('The draw deck is empty, so this is your last turn!') ; write('')),
     played_cards(card(red,    NumR, _)),
     played_cards(card(yellow, NumY, _)),
     played_cards(card(green,  NumG, _)),
